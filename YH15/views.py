@@ -1,86 +1,149 @@
+import random
+from typing import List, Dict
+
 from django.http import HttpResponse
 from django.template import loader
+from django.db.models.query import QuerySet
 from django.db.models import Q
+from django.views.generic import DetailView
+
 from YH15.models import Bar
+from YH15.filter import BarFilter
+from YH15.request_helper import RequestHelper
 
-BAR_SEARCH = None
-BAR_FILTER = None
 
-def list(request):
-    global BAR_SEARCH
-    BAR_SEARCH = None
-    global BAR_FILTER
-    BAR_FILTER = None
-    bar_list = Bar.objects.order_by('-bar_rating')[:]
-    template = loader.get_template('YH15/list.html')
+def send_http_request(request, bar_list: QuerySet, template: str) -> HttpResponse:
+
+    template = loader.get_template(template)
     context = {
         'bar_list': bar_list,
     }
-    return HttpResponse(template.render(context, request))
-
-
-def search(request):
-    query = request.GET.get('name')
-    global BAR_SEARCH
-    BAR_SEARCH = query
-    bar_list = Bar.objects.filter(
-        Q(bar_name__icontains=query)
-    )
-    bar_list = bar_list.order_by('-bar_name')[:]
-    template = loader.get_template('YH15/search.html')
-    context = {
-        'bar_list': bar_list,
-    }
-    return HttpResponse(template.render(context,request))
-
-def to_filter(request):
-    rating = request.GET.get('rating')
-    if rating == '':
-        rating = '0'
-    capacity = request.GET.get('capacity')
-    if capacity == '':
-        capacity = '0'
-    occupancy = request.GET.get('occupancy')
-    if occupancy == '':
-        occupancy = '0'
-    bar_list = Bar.objects.filter(bar_rating__range=(rating, 5))
-    bar_list = bar_list.filter(bar_capacity__range=(capacity, 99999))
-    bar_list = bar_list.filter(bar_occupancy__range=(occupancy, 99999))
-    return bar_list
-
-def sort(request):
-    global BAR_SEARCH
-    bar_search = BAR_SEARCH
-    global BAR_FILTER
-    if bar_search is not None:
-        bar_list = Bar.objects.filter(
-            Q(bar_name__icontains=bar_search)
+    return HttpResponse(
+        template.render(
+            context,
+            request
         )
-    elif bar_filter is not None:
-        bar_list = to_filter(BAR_FILTER)
-    else:
-        bar_list = Bar.objects.all()
-    sort_type = request.GET.get('sort_type')
-    bar_list = bar_list.order_by(f'-bar_{sort_type}')[:]
-    template = loader.get_template('YH15/sort.html')
-    context = {
-        'bar_list': bar_list,
-    }
-    return HttpResponse(template.render(context, request))
+    )
 
 
-def bar_filter(request):
-    global BAR_FILTER
-    BAR_FILTER = request
-    bar_list = to_filter(request)
-    context = {
-        'bar_list': bar_list,
-    }
-    template = loader.get_template('YH15/filter.html')
-    return HttpResponse(template.render(context, request))
+def create_more():
+    import random
+    from YH15.models import Bar
+
+    names =[
+        "CHAIRS",
+        "FULTON STREET",
+        "HANDLES MIDWOOD",
+        "HANDLES FROZEN YOGURT",
+        "BOWERY HOLDING",
+        "AVENUE GLATT",
+        "ORCHARD BAR",
+        "ESTRELLA",
+        "HUDSON BAGEL CORP",
+    ]
+    for name in names:
+        c = random.randrange(100, 800)
+        o = int(c * random.randrange(1, 11) / 10)
+        r = round(random.random() * 5 + 2, 1)
+        if r >=5:
+            r = 4.2
+
+        Bar.objects.create(
+            bar_name=name.lower(),
+            bar_rating=r,
+            bar_capacity=c,
+            bar_occupancy=o,
+        )
 
 
-def details(request, bar_id):
+class ListBarView(DetailView):
+    DEFAULT_TEMPLATE: str = 'YH15/list.html'
+
+    def get(self, request, *args, **kwargs) -> HttpResponse:
+        create_more()
+        RequestHelper.reset_search_request()
+        RequestHelper.reset_filter_request()
+        return send_http_request(
+            request,
+            ListBarView.get_default_bars(),
+            ListBarView.DEFAULT_TEMPLATE
+        )
+
+    @staticmethod
+    def get_default_bars() -> QuerySet:
+        """Get all the bars sorted by bar rating by default."""
+        return Bar.objects.order_by('-bar_rating')[:]
+
+
+class SearchBarView(DetailView):
+    DEFAULT_TEMPLATE: str = 'YH15/search.html'
+
+    def get(self, request, *args, **kwargs) -> HttpResponse:
+        query = request.GET.get('name')
+        RequestHelper.cache_search_request(query)
+
+        return send_http_request(
+            request,
+            SearchBarView.search_bar_models(),
+            SearchBarView.DEFAULT_TEMPLATE,
+        )
+
+    @staticmethod
+    def search_bar_models() -> QuerySet:
+        bar_list = Bar.objects.filter(
+            Q(
+                bar_name__icontains=RequestHelper.bar_search_request
+            )
+        )
+        return bar_list.order_by('-bar_name')[:]
+
+
+class SortBarView(DetailView):
+    DEFAULT_TEMPLATE = 'YH15/sort.html'
+
+    def get(self, request, *args, **kwargs) -> HttpResponse:
+        return send_http_request(
+            request,
+            SortBarView.sort_bars(request),
+            SortBarView.DEFAULT_TEMPLATE
+        )
+
+    @staticmethod
+    def get_sort_sort_order_and_type(request) -> List[str]:
+        return [
+            request.GET.get('sort_order'),
+            request.GET.get('sort_type'),
+        ]
+
+    @staticmethod
+    def sort_bars(request) -> QuerySet:
+        bar_list = RequestHelper.get_current_bar_query()
+
+        sort_order, sort_type = SortBarView.get_sort_sort_order_and_type(request)
+
+        if sort_order == 'high_low':
+            return bar_list.order_by(f'-bar_{sort_type}')[:]
+
+        return bar_list.order_by(f'-bar_{sort_type}')[::-1]
+
+
+class FilterBarView(DetailView):
+    DEFAULT_TEMPLATE = 'YH15/filter.html'
+
+    def get(self, request, *args, **kwargs) -> HttpResponse:
+        return send_http_request(
+            request,
+            FilterBarView.filter_bars(request),
+            SortBarView.DEFAULT_TEMPLATE,
+        )
+
+    @staticmethod
+    def filter_bars(request) -> QuerySet:
+        RequestHelper.cache_filter_request(request)
+        return BarFilter.filter_bars(request)
+
+
+def get_bar_details(request, bar_id: int) -> HttpResponse:
     bar = Bar.objects.get(id=bar_id)
     bar_name = bar.bar_name
-    return HttpResponse("You're looking at bar %s." % bar_name)
+    return HttpResponse(f"You're looking at bar {bar_name}.")
