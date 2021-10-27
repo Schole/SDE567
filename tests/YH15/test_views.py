@@ -182,14 +182,14 @@ class TestRecommendBarView(TestCase):
         )
 
     def test_rank_popular_bars(self) -> None:
-        bar_secure_scores: Dict[Bar, int] = RecommendBarView.rank_secure_bars(self.bar_list)
+        bar_secure_scores: Dict[Bar, int] = RecommendBarView.rank_safety_bars(self.bar_list)
         self.assertListEqual(
             list(bar_secure_scores.values()),
             [3, 5, 4, 3, 3, 2, 1, 1, 0]
         )
 
-    def test_rank_secure_bars(self) -> None:
-        bar_popular_scores: Dict[Bar, int] = RecommendBarView.rank_secure_bars(self.bar_list)
+    def test_rank_safety_bars(self) -> None:
+        bar_popular_scores: Dict[Bar, int] = RecommendBarView.rank_safety_bars(self.bar_list)
         self.assertListEqual(
             list(bar_popular_scores.values()),
             [3, 5, 4, 3, 3, 2, 1, 1, 0]

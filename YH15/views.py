@@ -13,6 +13,7 @@ from YH15.request_helper import RequestHelper
 
 
 def send_http_request(request, bar_list: QuerySet, template: str) -> HttpResponse:
+
     template = loader.get_template(template)
     context = {
         'bar_list': bar_list,
@@ -25,10 +26,42 @@ def send_http_request(request, bar_list: QuerySet, template: str) -> HttpRespons
     )
 
 
+def create_more():
+    import random
+    from YH15.models import Bar
+
+    names =[
+        "CHAIRS",
+        "FULTON STREET",
+        "HANDLES MIDWOOD",
+        "HANDLES FROZEN YOGURT",
+        "BOWERY HOLDING",
+        "AVENUE GLATT",
+        "ORCHARD BAR",
+        "ESTRELLA",
+        "HUDSON BAGEL CORP",
+    ]
+    for name in names:
+        c = random.randrange(100, 800)
+        o = int(c * random.randrange(1, 11) / 10)
+        r = round(random.random() * 5 + 2, 1)
+        if r >=5:
+            r = 4.2
+
+        Bar.objects.create(
+            bar_name=name.lower(),
+            bar_rating=r,
+            bar_capacity=c,
+            bar_occupancy=o,
+        )
+    # Bar.objects.all().delete()
+
+
 class ListBarView(DetailView):
     DEFAULT_TEMPLATE: str = 'YH15/list.html'
 
     def get(self, request, *args, **kwargs) -> HttpResponse:
+        create_more()
         RequestHelper.reset_search_request()
         RequestHelper.reset_filter_request()
         return send_http_request(
@@ -139,7 +172,7 @@ class RecommendBarView(DetailView):
 
     @staticmethod
     def rank_bars(bars: List[Bar]) -> List[Bar]:
-        secure_scores = RecommendBarView.rank_secure_bars(bars)
+        secure_scores = RecommendBarView.rank_safety_bars(bars)
         popular_scores = RecommendBarView.rank_popular_bars(bars)
         for index, bar in enumerate(secure_scores):
             secure_scores[bar] += popular_scores[bar]
@@ -152,7 +185,7 @@ class RecommendBarView(DetailView):
         return [x[0] for x in sorted_total_scores]
 
     @staticmethod
-    def rank_secure_bars(bars: List[Bar]) -> Dict[Bar, int]:
+    def rank_safety_bars(bars: List[Bar]) -> Dict[Bar, int]:
         bar_secure_scores: Dict[Bar, int] = {bar: 0 for bar in bars}
         sorted_bars = sorted(
             bars,
