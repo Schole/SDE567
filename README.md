@@ -15,3 +15,6 @@ Launch Django server, under the main folder:
 ```
 python manage.py runserver
 ```
+
+In your browser, go to:
+http://127.0.0.1:8000/YH15/
